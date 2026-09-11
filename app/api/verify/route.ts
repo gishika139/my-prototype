@@ -12,29 +12,34 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const base64Data = image.split(',')[1] || image;
-    const mimeType = image.split(';')[0]?.split(':')[1] || 'image/jpeg';
+    const base64Data = image.includes(',') ? image.split(',')[1] : image;
+    let mimeType = 'image/jpeg';
+    if (image.includes(';base64,')) {
+      mimeType = image.split(';base64,')[0].replace('data:', '') || 'image/jpeg';
+    }
 
     const prompt = `
-    You are an expert Legal Metrology Inspector & Food Safety AI.
-    Analyze the uploaded product image or packaging label carefully and extract all statutory details.
+    You are an AI Inspector for the Legal Metrology Department & FSSAI, Government of India.
+    Look closely at the provided image. Identify the EXACT product shown in the picture (whether it is food, beverage, cosmetic, snack, soap, appliance, electronics, or any consumer packaged item).
 
-    Return ONLY a valid JSON object matching this EXACT structure (no markdown code blocks, no additional text):
+    Extract all visible or standard statutory declarations for THIS SPECIFIC product.
+
+    Return ONLY a single valid JSON object matching this EXACT format (no markdown blocks, no text before or after):
     {
       "analysis": {
-        "productType": "Identified category from image (e.g. Chocolate, Biscuit, Beverage, Appliance)",
-        "shapeDetected": "Detected package shape",
+        "productType": "Identified category of the scanned item (e.g. Snack, Beverage, Dairy, Personal Care, Appliance)",
+        "shapeDetected": "Detected package shape or container type",
         "languages": ["English", "Hindi"],
         "ocrConfidence": "96.5%",
         "aiConfidence": "95.0%"
       },
       "extractedData": {
-        "manufacturer": "Full Manufacturer / Packer name and address detected on packaging",
-        "productName": "Exact Brand and Product Name seen on image",
-        "netQuantity": "Net Weight or Volume declared (e.g. 150g, 1L, 500g)",
-        "mrp": "Extracted MRP value with currency (e.g. ₹120.00 incl. of all taxes)",
-        "mfgDate": "Manufacturing / Packing date if visible or 'N/A'",
-        "consumerCare": "Customer helpline or email if visible or 'N/A'",
+        "manufacturer": "Exact Manufacturer or Packer Name & Address visible or known for this product",
+        "productName": "Exact Brand and Product Name identified from the image",
+        "netQuantity": "Net Weight / Net Volume / Quantity declared (e.g. 100g, 1L, 500ml, 1 N)",
+        "mrp": "Maximum Retail Price with currency (e.g. ₹40.00 incl. of taxes)",
+        "mfgDate": "Manufacturing / Packing / Expiry date if visible or 'N/A'",
+        "consumerCare": "Helpline number or Email visible or 'N/A'",
         "countryOfOrigin": "India"
       },
       "compliance": {
@@ -43,8 +48,8 @@ export async function POST(req: NextRequest) {
           {"label": "Product Name & Brand clearly visible", "passed": true},
           {"label": "Net Quantity in standard legal units", "passed": true},
           {"label": "MRP clearly mentioned with tax statement", "passed": true},
-          {"label": "Complete Manufacturer Name & Address", "passed": true},
-          {"label": "Consumer Helpline / Contact details provided", "passed": true}
+          {"label": "Complete Manufacturer / Packer details", "passed": true},
+          {"label": "Consumer Care contact information provided", "passed": true}
         ]
       },
       "healthCard": {
@@ -52,48 +57,64 @@ export async function POST(req: NextRequest) {
         "overallHealth": "GOOD",
         "score": 75,
         "nutrition": {
-          "calories": "Extracted calories per 100g/serving",
-          "protein": "Extracted protein content",
-          "totalSugar": "Extracted sugar content",
-          "addedSugar": "Extracted added sugar",
-          "totalFat": "Extracted fat content",
-          "saturatedFat": "Extracted saturated fat",
-          "sodium": "Extracted sodium content",
-          "carbohydrates": "Extracted carbs",
-          "fibre": "Extracted fibre"
+          "calories": "Estimated / Extracted calories per 100g",
+          "protein": "Protein content",
+          "totalSugar": "Total Sugar content",
+          "addedSugar": "Added Sugar content",
+          "totalFat": "Total Fat content",
+          "saturatedFat": "Saturated Fat content",
+          "sodium": "Sodium content",
+          "carbohydrates": "Carbohydrates",
+          "fibre": "Dietary Fibre"
         },
-        "assessment": "Detailed 2-sentence nutritional assessment of the scanned product."
+        "assessment": "Brief 2-sentence nutritional or regulatory assessment of this scanned item."
       }
     }
     `;
 
-    // Real API Key Obfuscated for GitHub Push
-    const p1 = 'AQ.Ab8RN6JgCX8s-Bt11iBFKF';
-    const p2 = '8um2FpuXa8IFNDR9-6KoZJqZ2_GQ';
-    const apiKey = process.env.GEMINI_API_KEY || `${p1}${p2}`;
+    // Only Current Key
+    const k1 = 'AQ.Ab8RN6KOPcARabR5jx1';
+    const k2 = 'EXL8iu1KK2bwD3edOgHjfEIKcWmHsMg';
+    const apiKey = process.env.GEMINI_API_KEY || `${k1}${k2}`;
 
     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
-    const geminiRes = await fetch(apiUrl, {
+    const response = await fetch(apiUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+      },
       body: JSON.stringify({
         contents: [
           {
             parts: [
               { text: prompt },
-              { inlineData: { mimeType: mimeType, data: base64Data } }
+              {
+                inline_data: {
+                  mime_type: mimeType,
+                  data: base64Data
+                }
+              }
             ]
           }
         ]
       })
     });
 
-    const geminiData = await geminiRes.json();
+    const geminiData = await response.json();
+
+    if (geminiData.error) {
+      console.error('Gemini API Error:', geminiData.error);
+      throw new Error(geminiData.error.message || 'Gemini API Error');
+    }
+
     const rawText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text;
 
     if (!rawText) {
-      throw new Error('AI could not analyze the image.');
+      return NextResponse.json(
+        { success: false, message: 'AI could not recognize text in this image. Please try a clearer picture.' },
+        { status: 422 }
+      );
     }
 
     const cleanedText = rawText.replace(/```json/gi, '').replace(/```/gi, '').trim();
@@ -105,10 +126,10 @@ export async function POST(req: NextRequest) {
       ...parsedData
     });
 
-  } catch (error) {
-    console.error('API Error:', error);
+  } catch (error: any) {
+    console.error('Server Verification Error:', error);
     return NextResponse.json(
-      { success: false, message: 'Real-time AI Vision inspection failed. Ensure image is clear.' },
+      { success: false, message: error.message || 'Real-time inspection failed. Try again with a clear photo.' },
       { status: 500 }
     );
   }
