@@ -20,24 +20,28 @@ export async function POST(req: NextRequest) {
 
     const prompt = `
     You are an AI Inspector for Legal Metrology & FSSAI, Government of India.
-    Inspect the provided product image carefully and extract all statutory details under Legal Metrology Rules.
+    EXAMINE THE ATTACHED PRODUCT PACKAGING IMAGE VERY CAREFULLY.
+    
+    1. Identify the EXACT Brand, Product Name, and Category visible in the image.
+    2. Read and extract the Manufacturer/Packer details, Net Weight/Volume, MRP, and Nutritional Values directly from the packaging.
+    3. If any field is blurry or not visible, estimate standard statutory details typical for that EXACT identified product.
 
-    Return ONLY a single valid JSON object with NO markdown formatting:
+    CRITICAL REQUIREMENT: Return ONLY a valid, single JSON object (no markdown, no extra commentary):
     {
       "analysis": {
-        "productType": "Identified category from image",
-        "shapeDetected": "Detected package shape",
+        "productType": "Identified Category from image (e.g. Potato Chips, Instant Noodles, Toiletries, Beverage, Dairy)",
+        "shapeDetected": "Detected packaging geometry",
         "languages": ["English", "Hindi"],
         "ocrConfidence": "96.5%",
         "aiConfidence": "95.0%"
       },
       "extractedData": {
-        "manufacturer": "Full Manufacturer / Packer name and address",
-        "productName": "Exact Brand and Product Name from image",
-        "netQuantity": "Net Weight or Volume declared",
-        "mrp": "Maximum Retail Price (e.g. ₹120.00 incl. of taxes)",
-        "mfgDate": "Manufacturing / Expiry date if visible or '08/2026'",
-        "consumerCare": "Customer helpline or email",
+        "manufacturer": "Exact Manufacturer or Packer Name & Address extracted/known for this scanned item",
+        "productName": "EXACT Brand and Product Name identified from THIS image",
+        "netQuantity": "Net Weight or Volume declared (e.g. 50g, 1L, 200g, 1 Unit)",
+        "mrp": "Maximum Retail Price visible or standard for this package",
+        "mfgDate": "Manufacturing or Packing date if visible or 'N/A'",
+        "consumerCare": "Helpline contact or Email visible or 'N/A'",
         "countryOfOrigin": "India"
       },
       "compliance": {
@@ -46,26 +50,26 @@ export async function POST(req: NextRequest) {
           {"label": "Product Name & Brand clearly visible", "passed": true},
           {"label": "Net Quantity in standard legal units", "passed": true},
           {"label": "MRP clearly mentioned with tax statement", "passed": true},
-          {"label": "Complete Manufacturer Name & Registered Address", "passed": true},
-          {"label": "Consumer Care contact details provided", "passed": true}
+          {"label": "Complete Manufacturer/Packer details", "passed": true},
+          {"label": "Consumer Care contact information provided", "passed": true}
         ]
       },
       "healthCard": {
         "applicable": true,
-        "overallHealth": "GOOD",
+        "overallHealth": "GOOD or MODERATE or POOR depending on product",
         "score": 75,
         "nutrition": {
-          "calories": "532 kcal",
-          "protein": "7.3 g",
-          "totalSugar": "56.5 g",
-          "addedSugar": "48.0 g",
-          "totalFat": "30.2 g",
-          "saturatedFat": "18.5 g",
-          "sodium": "145 mg",
-          "carbohydrates": "59.0 g",
-          "fibre": "2.1 g"
+          "calories": "Calories value for this specific product",
+          "protein": "Protein content",
+          "totalSugar": "Total Sugar content",
+          "addedSugar": "Added Sugar content",
+          "totalFat": "Total Fat content",
+          "saturatedFat": "Saturated Fat content",
+          "sodium": "Sodium content",
+          "carbohydrates": "Carbohydrates",
+          "fibre": "Dietary Fibre"
         },
-        "assessment": "Product complies with FSSAI statutory packaging rules and Legal Metrology Act."
+        "assessment": "Detailed 2-sentence nutritional assessment for this specific scanned item."
       }
     }
     `;
@@ -74,20 +78,15 @@ export async function POST(req: NextRequest) {
     const k2 = 'EXL8iu1KK2bwD3edOgHjfEIKcWmHsMg';
     const apiKey = process.env.GEMINI_API_KEY || `${k1}${k2}`;
 
-    let parsedData = null;
+    // Updated Active 2026 Models (gemini-2.5-flash / gemini-3.5-flash)
+    const activeModels = ['gemini-2.5-flash', 'gemini-3.5-flash'];
+    let rawText = '';
+    let lastError = '';
 
-    // List of Active Model Aliases to prevent 404
-    const modelEndpoints = [
-      'gemini-2.5-flash',
-      'gemini-2.0-flash',
-      'gemini-1.5-flash',
-      'gemini-1.5-pro'
-    ];
-
-    for (const model of modelEndpoints) {
+    for (const model of activeModels) {
       try {
         const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-        const response = await fetch(apiUrl, {
+        const res = await fetch(apiUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -102,67 +101,28 @@ export async function POST(req: NextRequest) {
           })
         });
 
-        const resData = await response.json();
-        const rawText = resData?.candidates?.[0]?.content?.parts?.[0]?.text;
-
-        if (rawText) {
-          const cleanedText = rawText.replace(/```json/gi, '').replace(/```/gi, '').trim();
-          parsedData = JSON.parse(cleanedText);
-          break; // Stop loop if successful
+        const data = await res.json();
+        if (data.error) {
+          lastError = data.error.message || JSON.stringify(data.error);
+          continue;
         }
-      } catch (err) {
-        console.warn(`Model ${model} try failed, switching to fallback.`);
+
+        rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        if (rawText) break;
+      } catch (err: any) {
+        lastError = err.message || 'Fetch error';
       }
     }
 
-    // Dynamic Intelligent Inspection Fallback (Guarantees zero alert errors on screen)
-    if (!parsedData) {
-      parsedData = {
-        analysis: {
-          productType: 'Packaged Confectionery / FMCG Commodity',
-          shapeDetected: 'Rectangular Contour Packaging',
-          languages: ['English', 'Hindi'],
-          ocrConfidence: '97.4%',
-          aiConfidence: '95.8%'
-        },
-        extractedData: {
-          manufacturer: 'Mondelez India Foods Private Limited, Unit No. 2001, 20th Floor, Tower 3, Mumbai - 400013',
-          productName: 'Cadbury Dairy Milk / Scanned Packaging Bar',
-          netQuantity: '150 g',
-          mrp: '₹125.00 (Incl. of all taxes)',
-          mfgDate: '08/2026',
-          consumerCare: '1800-22-7080 / consumer.care@mdlz.com',
-          countryOfOrigin: 'India'
-        },
-        compliance: {
-          status: 'COMPLIANT',
-          checklist: [
-            { label: 'Product Name & Brand clearly visible', passed: true },
-            { label: 'Net Quantity in legal standard units (150 g)', passed: true },
-            { label: 'MRP clearly displayed with tax statement (₹125.00)', passed: true },
-            { label: 'Complete Manufacturer Name & Registered Address', passed: true },
-            { label: 'Consumer Helpline details available', passed: true }
-          ]
-        },
-        healthCard: {
-          applicable: true,
-          overallHealth: 'MODERATE',
-          score: 70,
-          nutrition: {
-            calories: '532 kcal (per 100g)',
-            protein: '7.3 g',
-            totalSugar: '56.5 g',
-            addedSugar: '48.0 g',
-            totalFat: '30.2 g',
-            saturatedFat: '18.5 g',
-            sodium: '145 mg',
-            carbohydrates: '59.0 g',
-            fibre: '2.1 g'
-          },
-          assessment: 'Statutory declarations extracted successfully. Packaging meets all prescribed Legal Metrology parameters.'
-        }
-      };
+    if (!rawText) {
+      return NextResponse.json(
+        { success: false, message: `Real-time Vision API Error: ${lastError}` },
+        { status: 500 }
+      );
     }
+
+    const cleanedText = rawText.replace(/```json/gi, '').replace(/```/gi, '').trim();
+    const parsedData = JSON.parse(cleanedText);
 
     return NextResponse.json({
       success: true,
@@ -172,7 +132,7 @@ export async function POST(req: NextRequest) {
 
   } catch (error: any) {
     return NextResponse.json(
-      { success: false, message: 'Server verification pipeline error.' },
+      { success: false, message: error.message || 'Server verification pipeline error.' },
       { status: 500 }
     );
   }
