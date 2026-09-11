@@ -72,14 +72,14 @@ export async function POST(req: NextRequest) {
     }
     `;
 
-    // Only Current Key
     const k1 = 'AQ.Ab8RN6KOPcARabR5jx1';
     const k2 = 'EXL8iu1KK2bwD3edOgHjfEIKcWmHsMg';
     const apiKey = process.env.GEMINI_API_KEY || `${k1}${k2}`;
 
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    // Endpoint with updated models API compatibility
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
-    const response = await fetch(apiUrl, {
+    let response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -101,10 +101,34 @@ export async function POST(req: NextRequest) {
       })
     });
 
-    const geminiData = await response.json();
+    let geminiData = await response.json();
+
+    // Fallback to gemini-1.5-pro if 2.5 endpoint requires fallback
+    if (geminiData.error) {
+      const fallbackUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`;
+      response = await fetch(fallbackUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                { text: prompt },
+                {
+                  inline_data: {
+                    mime_type: mimeType,
+                    data: base64Data
+                  }
+                }
+              ]
+            }
+          ]
+        })
+      });
+      geminiData = await response.json();
+    }
 
     if (geminiData.error) {
-      console.error('Gemini API Error:', geminiData.error);
       throw new Error(geminiData.error.message || 'Gemini API Error');
     }
 
