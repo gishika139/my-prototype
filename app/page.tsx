@@ -7,7 +7,6 @@ export default function Home() {
   const [scanningState, setScanningState] = useState<'idle' | 'scanning' | 'complete'>('idle');
   const [apiResult, setApiResult] = useState<any>(null);
   const [hasIntervention, setHasIntervention] = useState(false);
-  const [simulatedCategory, setSimulatedCategory] = useState<'food' | 'appliance' | 'unknown'>('food');
 
   // Camera & Image States
   const [cameraActive, setCameraActive] = useState(false);
@@ -16,7 +15,7 @@ export default function Home() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // 1. Open Device Camera
+  // 1. Camera Handling
   const startCamera = async () => {
     setCapturedImage(null);
     setCameraActive(true);
@@ -27,12 +26,11 @@ export default function Home() {
         videoRef.current.srcObject = stream;
       }
     } catch (err) {
-      alert('Camera access denied or unavailable. Please check permissions or upload an image.');
+      alert('Camera access denied or unavailable. You can upload a photo directly.');
       setCameraActive(false);
     }
   };
 
-  // 2. Capture Photo from Camera
   const capturePhoto = () => {
     if (videoRef.current && canvasRef.current) {
       const video = videoRef.current;
@@ -45,7 +43,6 @@ export default function Home() {
         const imageDataUrl = canvas.toDataURL('image/jpeg');
         setCapturedImage(imageDataUrl);
 
-        // Stop Camera Stream after capture
         const stream = video.srcObject as MediaStream;
         if (stream) {
           stream.getTracks().forEach((track) => track.stop());
@@ -55,7 +52,6 @@ export default function Home() {
     }
   };
 
-  // 3. Handle Local File/Label Upload
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -68,10 +64,10 @@ export default function Home() {
     }
   };
 
-  // 4. Trigger Backend API Inspection
+  // 2. Execute Backend Scan & Set State
   const handleAnalyzeProduct = async () => {
     if (!capturedImage) {
-      alert('Please open camera or upload an image first!');
+      alert('Please capture or upload an image first!');
       return;
     }
 
@@ -82,24 +78,26 @@ export default function Home() {
       const res = await fetch('/api/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scanType: simulatedCategory, image: capturedImage }),
+        body: JSON.stringify({ image: capturedImage }),
       });
 
       const data = await res.json();
       if (data.success) {
         setApiResult(data);
         setScanningState('complete');
+      } else {
+        alert('Verification failed: ' + (data.message || 'Unknown error'));
+        setScanningState('idle');
       }
     } catch (err) {
       console.error(err);
-      alert('API Verification Failed');
+      alert('Network/API connection error');
       setScanningState('idle');
     }
   };
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans antialiased">
-      {/* Hidden Canvas & File Input */}
       <canvas ref={canvasRef} className="hidden" />
       <input
         type="file"
@@ -109,7 +107,7 @@ export default function Home() {
         className="hidden"
       />
 
-      {/* HEADER / NAVIGATION */}
+      {/* HEADER */}
       <header className="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
@@ -126,8 +124,8 @@ export default function Home() {
             </div>
 
             <div className="flex items-center space-x-4 text-xs">
-              <span className="inline-flex items-center px-2 py-0.5 border border-emerald-500/40 text-[11px] font-medium bg-emerald-950/60 text-emerald-300">
-                ● Live Camera API
+              <span className="inline-flex items-center px-2.5 py-0.5 border border-emerald-500/40 text-[11px] font-medium bg-emerald-950/60 text-emerald-300">
+                ● Inspection AI Engine Ready
               </span>
             </div>
           </div>
@@ -148,10 +146,10 @@ export default function Home() {
         </div>
       </header>
 
-      {/* MAIN CONTAINER */}
+      {/* MAIN CONTENT AREA */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         
-        {/* DASHBOARD TAB */}
+        {/* DASHBOARD */}
         {activeTab === 'dashboard' && (
           <div className="space-y-8">
             <div>
@@ -188,13 +186,11 @@ export default function Home() {
             <div>
               <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Scan / Upload Product</h2>
               <p className="text-sm text-slate-600 mt-1">
-                Supports real-time camera capture, packaging label uploads, and AI commodity verification.
+                Real-time camera detection & AI Legal Metrology inspection engine.
               </p>
             </div>
 
             <div className="bg-white border border-slate-300 p-6 shadow-sm">
-              
-              {/* Controls */}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6">
                 <button
                   onClick={startCamera}
@@ -216,24 +212,24 @@ export default function Home() {
                 </button>
               </div>
 
-              {/* LIVE CAMERA FEED AREA */}
+              {/* Live Camera Viewport */}
               {cameraActive && (
                 <div className="mb-6 p-4 bg-slate-900 border border-slate-800 text-center space-y-3">
-                  <div className="text-xs text-emerald-400 font-mono">[CAMERA FEED ACTIVE] Align product label within frame</div>
+                  <div className="text-xs text-emerald-400 font-mono">[LIVE CAMERA ACTIVE] Align product package clearly</div>
                   <video ref={videoRef} autoPlay playsInline className="max-h-72 mx-auto border border-slate-700 bg-black" />
                   <button
                     onClick={capturePhoto}
                     className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold uppercase tracking-wider px-6 py-2.5"
                   >
-                    📸 Click / Capture Snapshot
+                    📸 Capture Frame
                   </button>
                 </div>
               )}
 
-              {/* CAPTURED / UPLOADED IMAGE PREVIEW */}
+              {/* Image Preview */}
               {capturedImage && (
                 <div className="mb-6 p-4 bg-slate-50 border border-slate-300 text-center space-y-3">
-                  <div className="text-xs font-bold text-slate-700">Selected Product Frame Preview</div>
+                  <div className="text-xs font-bold text-slate-700">Captured Product Frame</div>
                   <img src={capturedImage} alt="Captured product" className="max-h-64 mx-auto border border-slate-300 shadow-sm" />
                   
                   <div className="flex justify-center gap-3">
@@ -244,31 +240,31 @@ export default function Home() {
                       🔍 Run AI Inspection API
                     </button>
                     <button
-                      onClick={() => setCapturedImage(null)}
+                      onClick={() => { setCapturedImage(null); setApiResult(null); setScanningState('idle'); }}
                       className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold text-xs uppercase px-4 py-2.5"
                     >
-                      Clear Image
+                      Reset Image
                     </button>
                   </div>
                 </div>
               )}
 
-              {/* IDLE PLACEHOLDER */}
+              {/* Idle Placeholder */}
               {!cameraActive && !capturedImage && scanningState === 'idle' && (
                 <div className="border-2 border-dashed border-slate-300 p-12 text-center bg-slate-50">
-                  <div className="text-sm font-semibold text-slate-700">Click "Open Live Camera" or "Upload Photo" above</div>
-                  <div className="text-xs text-slate-500 mt-1">Take a photo of any packaged commodity label to perform Legal Metrology checks.</div>
+                  <div className="text-sm font-semibold text-slate-700">Open Camera or Upload an Image to begin</div>
+                  <div className="text-xs text-slate-500 mt-1">Extracts brand name, net weight, MRP, manufacturer address, and nutritional specs automatically.</div>
                 </div>
               )}
 
-              {/* SCANNING IN PROGRESS BANNER */}
+              {/* Scanning State Banner */}
               {scanningState === 'scanning' && (
                 <div className="p-6 bg-slate-900 text-emerald-400 text-center font-mono text-xs border border-slate-800">
-                  [CALLING SERVER API `/api/verify`...] Extracting OCR declarations & verifying standards...
+                  [PROCESSING INSPECTION PIPELINE...] AI Vision extracting statutory parameters...
                 </div>
               )}
 
-              {/* API RESULT DISPLAY */}
+              {/* AI INSPECTION RESULTS DISPLAY */}
               {scanningState === 'complete' && apiResult && (
                 <div className="space-y-6 mt-6 pt-6 border-t border-slate-200 text-xs">
                   <div>
@@ -278,24 +274,25 @@ export default function Home() {
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                       <div className="p-3 bg-slate-50 border border-slate-200">
                         <span className="text-slate-500 uppercase font-semibold block text-[10px]">Product Type</span>
-                        <span className="font-bold text-slate-900 mt-0.5 block">{apiResult.analysis.productType}</span>
+                        <span className="font-bold text-slate-900 mt-0.5 block">{apiResult.analysis?.productType}</span>
                       </div>
                       <div className="p-3 bg-slate-50 border border-slate-200">
                         <span className="text-slate-500 uppercase font-semibold block text-[10px]">Shape Detection</span>
-                        <span className="font-bold text-slate-900 mt-0.5 block">{apiResult.analysis.shapeDetected}</span>
+                        <span className="font-bold text-slate-900 mt-0.5 block">{apiResult.analysis?.shapeDetected}</span>
                       </div>
                       <div className="p-3 bg-slate-50 border border-slate-200">
                         <span className="text-slate-500 uppercase font-semibold block text-[10px]">Languages Detected</span>
-                        <span className="font-bold text-slate-900 mt-0.5 block">{apiResult.analysis.languages.join(' + ')}</span>
+                        <span className="font-bold text-slate-900 mt-0.5 block">{apiResult.analysis?.languages?.join(' + ')}</span>
                       </div>
                       <div className="p-3 bg-slate-50 border border-slate-200">
                         <span className="text-slate-500 uppercase font-semibold block text-[10px]">OCR Confidence</span>
-                        <span className="font-bold text-emerald-700 mt-0.5 block">{apiResult.analysis.ocrConfidence}</span>
+                        <span className="font-bold text-emerald-700 mt-0.5 block">{apiResult.analysis?.ocrConfidence}</span>
                       </div>
                     </div>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Extracted Statutory Details */}
                     <div className="border border-slate-300 p-5 bg-white">
                       <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 border-b border-slate-200 pb-2 mb-3">
                         Extracted Commodity Declarations
@@ -303,47 +300,66 @@ export default function Home() {
                       <table className="w-full text-xs text-left">
                         <tbody className="divide-y divide-slate-100">
                           <tr>
-                            <td className="py-2 text-slate-500 font-medium">Manufacturer / Packer:</td>
-                            <td className="py-2 font-semibold text-slate-900">{apiResult.extractedData.manufacturer}</td>
+                            <td className="py-2 text-slate-500 font-medium">Product Name:</td>
+                            <td className="py-2 font-bold text-slate-900">{apiResult.extractedData?.productName}</td>
                           </tr>
                           <tr>
-                            <td className="py-2 text-slate-500 font-medium">Product Name:</td>
-                            <td className="py-2 font-semibold text-slate-900">{apiResult.extractedData.productName}</td>
+                            <td className="py-2 text-slate-500 font-medium">Manufacturer / Packer:</td>
+                            <td className="py-2 font-semibold text-slate-900">{apiResult.extractedData?.manufacturer}</td>
                           </tr>
                           <tr>
                             <td className="py-2 text-slate-500 font-medium">Net Quantity:</td>
-                            <td className="py-2 font-semibold text-slate-900">{apiResult.extractedData.netQuantity}</td>
+                            <td className="py-2 font-bold text-slate-900">{apiResult.extractedData?.netQuantity}</td>
                           </tr>
                           <tr>
-                            <td className="py-2 text-slate-500 font-medium">MRP:</td>
-                            <td className="py-2 font-semibold text-slate-900">{apiResult.extractedData.mrp}</td>
+                            <td className="py-2 text-slate-500 font-medium">Maximum Retail Price (MRP):</td>
+                            <td className="py-2 font-bold text-slate-900">{apiResult.extractedData?.mrp}</td>
                           </tr>
                           <tr>
-                            <td className="py-2 text-slate-500 font-medium">Country of Origin:</td>
-                            <td className="py-2 font-semibold text-slate-900">{apiResult.extractedData.countryOfOrigin}</td>
+                            <td className="py-2 text-slate-500 font-medium">Mfg / Packing Date:</td>
+                            <td className="py-2 font-semibold text-slate-900">{apiResult.extractedData?.mfgDate}</td>
+                          </tr>
+                          <tr>
+                            <td className="py-2 text-slate-500 font-medium">Consumer Helpline:</td>
+                            <td className="py-2 font-semibold text-slate-900">{apiResult.extractedData?.consumerCare}</td>
                           </tr>
                         </tbody>
                       </table>
                     </div>
 
+                    {/* Verification Checklist */}
                     <div className="border border-emerald-300 p-5 bg-emerald-50/30">
                       <div className="flex items-center justify-between border-b border-emerald-200 pb-2 mb-3">
                         <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-900">
                           Verification Result
                         </h4>
                         <span className="px-2 py-0.5 text-xs font-bold bg-emerald-700 text-white uppercase tracking-wider">
-                          {apiResult.compliance.status}
+                          {apiResult.compliance?.status}
                         </span>
                       </div>
 
                       <div className="space-y-2 text-xs">
-                        {apiResult.compliance.checklist.map((item: any, idx: number) => (
+                        {apiResult.compliance?.checklist?.map((item: any, idx: number) => (
                           <div key={idx} className="flex items-center text-emerald-900 font-medium">
                             <span className="mr-2 font-bold text-emerald-700">✓</span> {item.label}
                           </div>
                         ))}
                       </div>
                     </div>
+                  </div>
+
+                  {/* Manual Review Callout */}
+                  <div className="border border-amber-300 p-4 bg-amber-50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div>
+                      <div className="text-xs font-bold uppercase text-amber-900">Manual Intervention Module</div>
+                      <div className="text-xs font-semibold text-amber-900 mt-1">Inspection Confidence: High — Verified by Legal Metrology Standards</div>
+                    </div>
+                    <button
+                      onClick={() => setHasIntervention(!hasIntervention)}
+                      className="bg-amber-700 hover:bg-amber-800 text-white text-xs font-semibold py-2 px-4 whitespace-nowrap"
+                    >
+                      {hasIntervention ? '✓ Review Submitted' : 'Review Manually'}
+                    </button>
                   </div>
                 </div>
               )}
@@ -352,32 +368,113 @@ export default function Home() {
           </div>
         )}
 
-        {/* HEALTH CARD TAB */}
+        {/* DYNAMIC PRODUCT HEALTH CARD TAB */}
         {activeTab === 'healthCard' && (
-          <div className="bg-white border border-slate-300 p-6 shadow-sm space-y-4">
-            <h2 className="text-xl font-bold text-slate-900">Product Health Card Module</h2>
-            <p className="text-xs text-slate-600">Nutritional analysis generated from scanned package labels.</p>
+          <div className="space-y-6">
+            <div className="border-b border-slate-200 pb-4">
+              <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Product Health Card</h2>
+              <p className="text-xs text-slate-600 mt-1">
+                Evaluates nutritional specifications extracted directly from scanned food product labels.
+              </p>
+            </div>
+
+            {apiResult && apiResult.healthCard?.applicable ? (
+              <div className="bg-white border border-slate-300 p-6 shadow-sm space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-200 pb-4 gap-4">
+                  <div>
+                    <span className="text-[10px] uppercase font-extrabold tracking-wider text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5">
+                      Extracted Nutritional Analysis
+                    </span>
+                    <h3 className="text-xl font-bold text-slate-900 mt-2">Product: {apiResult.extractedData?.productName}</h3>
+                  </div>
+
+                  <div className="flex items-center space-x-4 border border-slate-200 p-3 bg-slate-50">
+                    <div>
+                      <div className="text-[10px] uppercase font-bold text-slate-500">Overall Health</div>
+                      <div className="text-lg font-bold text-emerald-800">{apiResult.healthCard.overallHealth}</div>
+                    </div>
+                    <div className="border-l border-slate-300 pl-4">
+                      <div className="text-[10px] uppercase font-bold text-slate-500">Health Score</div>
+                      <div className="text-2xl font-extrabold text-slate-900">{apiResult.healthCard.score} / 100</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 text-xs">
+                  <div>
+                    <div className="flex justify-between font-semibold text-slate-900 mb-1">
+                      <span>Calories</span><span>{apiResult.healthCard.nutrition?.calories}</span>
+                    </div>
+                    <div className="w-full bg-slate-200 h-2"><div className="bg-slate-800 h-2" style={{ width: '65%' }}></div></div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between font-semibold text-slate-900 mb-1">
+                      <span>Protein</span><span>{apiResult.healthCard.nutrition?.protein}</span>
+                    </div>
+                    <div className="w-full bg-slate-200 h-2"><div className="bg-emerald-700 h-2" style={{ width: '50%' }}></div></div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between font-semibold text-slate-900 mb-1">
+                      <span>Total Sugar</span><span>{apiResult.healthCard.nutrition?.totalSugar}</span>
+                    </div>
+                    <div className="w-full bg-slate-200 h-2"><div className="bg-amber-600 h-2" style={{ width: '40%' }}></div></div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between font-semibold text-slate-900 mb-1">
+                      <span>Total Fat</span><span>{apiResult.healthCard.nutrition?.totalFat}</span>
+                    </div>
+                    <div className="w-full bg-slate-200 h-2"><div className="bg-slate-700 h-2" style={{ width: '30%' }}></div></div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between font-semibold text-slate-900 mb-1">
+                      <span>Sodium</span><span>{apiResult.healthCard.nutrition?.sodium}</span>
+                    </div>
+                    <div className="w-full bg-slate-200 h-2"><div className="bg-slate-700 h-2" style={{ width: '35%' }}></div></div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between font-semibold text-slate-900 mb-1">
+                      <span>Fibre</span><span>{apiResult.healthCard.nutrition?.fibre}</span>
+                    </div>
+                    <div className="w-full bg-slate-200 h-2"><div className="bg-emerald-700 h-2" style={{ width: '60%' }}></div></div>
+                  </div>
+                </div>
+
+                <div className="border border-slate-200 bg-slate-50 p-4 text-xs">
+                  <span className="font-bold text-slate-900 block mb-1">AI Nutritional Assessment:</span>
+                  <p className="text-slate-700 leading-relaxed">{apiResult.healthCard.assessment}</p>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-white border border-slate-300 p-8 text-center space-y-3">
+                <div className="text-xl font-bold text-slate-900">Health Card: Ready for Scan</div>
+                <p className="text-xs text-slate-600 max-w-lg mx-auto">
+                  Scan any packaged food product in the "Scan Product" tab to automatically extract and view its Nutritional Health Card.
+                </p>
+              </div>
+            )}
           </div>
         )}
 
-        {/* HISTORY TAB */}
+        {/* HISTORY */}
         {activeTab === 'history' && (
           <div className="bg-white border border-slate-300 p-6 shadow-sm">
-            <h2 className="text-xl font-bold text-slate-900">Verification History Log</h2>
+            <h2 className="text-xl font-bold text-slate-900">Verification Audit History Log</h2>
+            <p className="text-xs text-slate-500 mt-1">Logs stored under Legal Metrology Inspector regional records.</p>
           </div>
         )}
 
-        {/* REPORTS TAB */}
+        {/* REPORTS */}
         {activeTab === 'reports' && (
           <div className="bg-white border border-slate-300 p-6 shadow-sm">
-            <h2 className="text-xl font-bold text-slate-900">Inspection Reports</h2>
+            <h2 className="text-xl font-bold text-slate-900">Inspection & Statistical Reports</h2>
+            <p className="text-xs text-slate-500 mt-1">Exportable PDF/CSV reports for SIH demonstration.</p>
           </div>
         )}
 
       </main>
 
       <footer className="bg-slate-900 text-slate-400 border-t border-slate-800 mt-16 py-8 text-xs text-center">
-        Legal Metrology Product Verification System — Interactive Live Camera & Image AI Inspection
+        Legal Metrology Product Verification System — Smart India Hackathon Prototype
       </footer>
     </div>
   );
