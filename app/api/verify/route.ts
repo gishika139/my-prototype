@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export async function POST(req: NextRequest) {
   try {
@@ -18,16 +19,24 @@ export async function POST(req: NextRequest) {
       mimeType = image.split(';base64,')[0].replace('data:', '') || 'image/jpeg';
     }
 
+    const k1 = 'AQ.Ab8RN6KOPcARabR5jx1';
+    const k2 = 'EXL8iu1KK2bwD3edOgHjfEIKcWmHsMg';
+    const apiKey = process.env.GEMINI_API_KEY || `${k1}${k2}`;
+
+    const genAI = new GoogleGenerativeAI(apiKey);
+    // Official SDK auto-resolves available Vision models
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+
     const prompt = `
     You are an AI Inspector for the Legal Metrology Department & FSSAI, Government of India.
     Look closely at the provided image. Identify the EXACT product shown in the picture (whether it is food, beverage, cosmetic, snack, soap, appliance, electronics, or any consumer packaged item).
 
     Extract all visible or standard statutory declarations for THIS SPECIFIC product.
 
-    Return ONLY a single valid JSON object matching this EXACT format (no markdown blocks, no text before or after):
+    Return ONLY a single valid JSON object matching this EXACT format (no markdown code blocks, no text before or after):
     {
       "analysis": {
-        "productType": "Identified category of the scanned item (e.g. Snack, Beverage, Dairy, Personal Care, Appliance)",
+        "productType": "Identified category of the scanned item",
         "shapeDetected": "Detected package shape or container type",
         "languages": ["English", "Hindi"],
         "ocrConfidence": "96.5%",
@@ -36,7 +45,7 @@ export async function POST(req: NextRequest) {
       "extractedData": {
         "manufacturer": "Exact Manufacturer or Packer Name & Address visible or known for this product",
         "productName": "Exact Brand and Product Name identified from the image",
-        "netQuantity": "Net Weight / Net Volume / Quantity declared (e.g. 100g, 1L, 500ml, 1 N)",
+        "netQuantity": "Net Weight / Net Volume / Quantity declared (e.g. 100g, 1L, 500ml)",
         "mrp": "Maximum Retail Price with currency (e.g. ₹40.00 incl. of taxes)",
         "mfgDate": "Manufacturing / Packing / Expiry date if visible or 'N/A'",
         "consumerCare": "Helpline number or Email visible or 'N/A'",
@@ -72,76 +81,24 @@ export async function POST(req: NextRequest) {
     }
     `;
 
-    const k1 = 'AQ.Ab8RN6KOPcARabR5jx1';
-    const k2 = 'EXL8iu1KK2bwD3edOgHjfEIKcWmHsMg';
-    const apiKey = process.env.GEMINI_API_KEY || `${k1}${k2}`;
-
-    // Endpoint with updated models API compatibility
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
-
-    let response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
+    const imagePart = {
+      inlineData: {
+        data: base64Data,
+        mimeType: mimeType,
       },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              { text: prompt },
-              {
-                inline_data: {
-                  mime_type: mimeType,
-                  data: base64Data
-                }
-              }
-            ]
-          }
-        ]
-      })
-    });
+    };
 
-    let geminiData = await response.json();
+    const result = await model.generateContent([prompt, imagePart]);
+    const responseText = result.response.text();
 
-    // Fallback to gemini-1.5-pro if 2.5 endpoint requires fallback
-    if (geminiData.error) {
-      const fallbackUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`;
-      response = await fetch(fallbackUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                { text: prompt },
-                {
-                  inline_data: {
-                    mime_type: mimeType,
-                    data: base64Data
-                  }
-                }
-              ]
-            }
-          ]
-        })
-      });
-      geminiData = await response.json();
-    }
-
-    if (geminiData.error) {
-      throw new Error(geminiData.error.message || 'Gemini API Error');
-    }
-
-    const rawText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text;
-
-    if (!rawText) {
+    if (!responseText) {
       return NextResponse.json(
         { success: false, message: 'AI could not recognize text in this image. Please try a clearer picture.' },
         { status: 422 }
       );
     }
 
-    const cleanedText = rawText.replace(/```json/gi, '').replace(/```/gi, '').trim();
+    const cleanedText = responseText.replace(/```json/gi, '').replace(/```/gi, '').trim();
     const parsedData = JSON.parse(cleanedText);
 
     return NextResponse.json({
@@ -151,9 +108,9 @@ export async function POST(req: NextRequest) {
     });
 
   } catch (error: any) {
-    console.error('Server Verification Error:', error);
+    console.error('SDK Verification Error:', error);
     return NextResponse.json(
-      { success: false, message: error.message || 'Real-time inspection failed. Try again with a clear photo.' },
+      { success: false, message: error?.message || 'Real-time inspection failed.' },
       { status: 500 }
     );
   }
